@@ -3,7 +3,7 @@ import { Routes, Route, Link, useNavigate } from "react-router-dom";
 import MenuCard from "./components/MenuCard";
 import Register from "./pages/Register";
 import Login from "./pages/Login";
-import ProfileSetup from "./pages/ProfileSetup";
+// import ProfileSetup from "./pages/ProfileSetup";
 import Profile from "./pages/Profile"; // Новый импорт профиля
 import ProtectedRoute from "./components/ProtectedRoute";
 import { ToastContainer, toast } from "react-toastify";
@@ -107,7 +107,6 @@ function App() {
         />
         <Route path="/register" element={<Register setToken={setToken} />} />
         <Route path="/login" element={<Login setToken={setToken} />} />
-        <Route path="/profile-setup" element={<ProfileSetup />} />
         <Route
           path="/profile"
           element={

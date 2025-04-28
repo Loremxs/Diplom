@@ -11,7 +11,10 @@ function Profile() {
     weight: "",
     height: "",
     goal: "",
+    activity_level: "",
+    calories: 0,
   });
+
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -22,7 +25,6 @@ function Profile() {
         navigate("/login");
         return;
       }
-
       try {
         const response = await fetch("http://localhost:3000/api/profile", {
           headers: {
@@ -56,7 +58,6 @@ function Profile() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     const token = localStorage.getItem("token");
     if (!token) {
       toast.error("Вы не авторизованы");
@@ -76,6 +77,21 @@ function Profile() {
 
       if (response.ok) {
         toast.success("Профиль успешно обновлен!");
+
+        // 👉 После успешного обновления повторно запрашиваем профиль
+        const updatedProfile = await fetch(
+          "http://localhost:3000/api/profile",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (updatedProfile.ok) {
+          const freshData = await updatedProfile.json();
+          setProfile(freshData); // обновляем профиль на фронте
+        }
       } else {
         toast.error("Ошибка при обновлении профиля");
       }
@@ -87,118 +103,120 @@ function Profile() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <p>Загрузка профиля...</p>
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-xl">Загрузка...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
+    <div className="flex justify-center items-center min-h-screen bg-gray-100">
       <form
         onSubmit={handleSubmit}
-        className="bg-white shadow-md rounded-2xl p-8 max-w-2xl mx-auto"
+        className="bg-white p-8 rounded-lg shadow-md w-full max-w-md"
       >
-        <h1 className="text-3xl font-bold mb-6 text-center">Личный кабинет</h1>
-        <div className="space-y-4">
-          <div>
-            <label className="block mb-1 font-semibold">Имя</label>
-            <input
-              type="text"
-              name="name"
-              value={profile.name}
-              onChange={handleChange}
-              className="w-full p-3 rounded-lg border border-gray-300"
-              required
-            />
-          </div>
+        <h2 className="text-2xl font-bold mb-6 text-center">Профиль</h2>
 
-          <div>
-            <label className="block mb-1 font-semibold">Email</label>
-            <input
-              type="email"
-              name="email"
-              value={profile.email}
-              onChange={handleChange}
-              className="w-full p-3 rounded-lg border border-gray-300"
-              required
-            />
-          </div>
+        <input
+          type="text"
+          name="name"
+          value={profile.name}
+          onChange={handleChange}
+          placeholder="Имя"
+          className="w-full p-2 mb-4 border rounded"
+          required
+        />
 
-          <div>
-            <label className="block mb-1 font-semibold">Пол</label>
-            <select
-              name="gender"
-              value={profile.gender}
-              onChange={handleChange}
-              className="w-full p-3 rounded-lg border border-gray-300"
-              required
-            >
-              <option value="">Выберите пол</option>
-              <option value="Мужской">Мужской</option>
-              <option value="Женский">Женский</option>
-            </select>
-          </div>
+        <input
+          type="email"
+          name="email"
+          value={profile.email}
+          onChange={handleChange}
+          placeholder="Email"
+          className="w-full p-2 mb-4 border rounded"
+          required
+        />
 
-          <div>
-            <label className="block mb-1 font-semibold">Возраст (лет)</label>
-            <input
-              type="number"
-              name="age"
-              value={profile.age}
-              onChange={handleChange}
-              className="w-full p-3 rounded-lg border border-gray-300"
-              required
-            />
-          </div>
+        <select
+          name="gender"
+          value={profile.gender}
+          onChange={handleChange}
+          className="w-full p-2 mb-4 border rounded"
+          required
+        >
+          <option value="">Выберите пол</option>
+          <option value="male">Мужчина</option>
+          <option value="female">Женщина</option>
+        </select>
 
-          <div>
-            <label className="block mb-1 font-semibold">Вес (кг)</label>
-            <input
-              type="number"
-              name="weight"
-              value={profile.weight}
-              onChange={handleChange}
-              className="w-full p-3 rounded-lg border border-gray-300"
-              required
-            />
-          </div>
+        <input
+          type="number"
+          name="age"
+          value={profile.age}
+          onChange={handleChange}
+          placeholder="Возраст"
+          className="w-full p-2 mb-4 border rounded"
+          required
+        />
 
-          <div>
-            <label className="block mb-1 font-semibold">Рост (см)</label>
-            <input
-              type="number"
-              name="height"
-              value={profile.height}
-              onChange={handleChange}
-              className="w-full p-3 rounded-lg border border-gray-300"
-              required
-            />
-          </div>
+        <input
+          type="number"
+          name="weight"
+          value={profile.weight}
+          onChange={handleChange}
+          placeholder="Вес (кг)"
+          className="w-full p-2 mb-4 border rounded"
+          required
+        />
 
-          <div>
-            <label className="block mb-1 font-semibold">Цель питания</label>
-            <select
-              name="goal"
-              value={profile.goal}
-              onChange={handleChange}
-              className="w-full p-3 rounded-lg border border-gray-300"
-              required
-            >
-              <option value="">Выберите цель</option>
-              <option value="Похудение">Похудение</option>
-              <option value="Набор массы">Набор массы</option>
-              <option value="Поддержание веса">Поддержание веса</option>
-            </select>
-          </div>
+        <input
+          type="number"
+          name="height"
+          value={profile.height}
+          onChange={handleChange}
+          placeholder="Рост (см)"
+          className="w-full p-2 mb-4 border rounded"
+          required
+        />
 
-          <button
-            type="submit"
-            className="w-full bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 mt-4"
-          >
-            Сохранить изменения
-          </button>
+        <select
+          name="goal"
+          value={profile.goal}
+          onChange={handleChange}
+          className="w-full p-2 mb-4 border rounded"
+          required
+        >
+          <option value="">Выберите цель</option>
+          <option value="lose">Похудение</option>
+          <option value="maintain">Поддержание веса</option>
+          <option value="gain">Набор массы</option>
+        </select>
+
+        <select
+          name="activity_level"
+          value={profile.activity_level}
+          onChange={handleChange}
+          className="w-full p-2 mb-6 border rounded"
+          required
+        >
+          <option value="">Уровень активности</option>
+          <option value="low">Минимальная активность</option>
+          <option value="light">Легкая активность</option>
+          <option value="moderate">Средняя активность</option>
+          <option value="high">Высокая активность</option>
+        </select>
+
+        {/* Рассчитанные калории */}
+        <div className="mb-6 text-center text-gray-700">
+          <strong>Рассчитанные калории:</strong> {profile.calories} ккал/день
         </div>
+
+        <button
+          type="submit"
+          className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+        >
+          Сохранить изменения
+        </button>
       </form>
     </div>
   );

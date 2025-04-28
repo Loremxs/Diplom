@@ -49,6 +49,53 @@ const mockMenu = [
   },
 ];
 
+// Функция для расчета калорий
+function calculateCalories({
+  gender,
+  age,
+  height,
+  weight,
+  activityLevel,
+  goal,
+}) {
+  let BMR;
+
+  if (gender === "male") {
+    BMR = 10 * weight + 6.25 * height - 5 * age + 5;
+  } else if (gender === "female") {
+    BMR = 10 * weight + 6.25 * height - 5 * age - 161;
+  } else {
+    throw new Error("Invalid gender");
+  }
+
+  const activityFactors = {
+    low: 1.2,
+    light: 1.375,
+    moderate: 1.55,
+    high: 1.725,
+  };
+
+  const activityMultiplier = activityFactors[activityLevel];
+
+  if (!activityMultiplier) {
+    throw new Error("Invalid activity level");
+  }
+
+  let calories = BMR * activityMultiplier;
+
+  if (goal === "lose") {
+    calories *= 0.85;
+  } else if (goal === "gain") {
+    calories *= 1.15;
+  } else if (goal === "maintain") {
+    // ничего не делаем
+  } else {
+    throw new Error("Invalid goal");
+  }
+
+  return Math.round(calories);
+}
+
 // Middleware для проверки токена
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
@@ -67,12 +114,35 @@ function authenticateToken(req, res, next) {
 
 // Регистрация пользователя
 app.post("/api/register", async (req, res) => {
-  const { name, email, password, gender, age } = req.body;
+  const {
+    name,
+    email,
+    password,
+    gender,
+    age,
+    weight,
+    height,
+    goal,
+    activityLevel,
+  } = req.body;
 
-  if (!name || !email || !password || !gender || !age) {
+  if (
+    !name ||
+    !email ||
+    !password ||
+    !gender ||
+    !age ||
+    !weight ||
+    !height ||
+    !goal ||
+    !activityLevel
+  ) {
     return res
       .status(400)
-      .json({ message: "Имя, Email, Пароль, Пол и Возраст обязательны" });
+      .json({
+        message:
+          "Все поля обязательны: имя, email, пароль, пол, возраст, вес, рост, цель, уровень активности",
+      });
   }
 
   try {
@@ -85,9 +155,32 @@ app.post("/api/register", async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Расчет калорий
+    const calories = calculateCalories({
+      gender,
+      age,
+      height,
+      weight,
+      activityLevel,
+      goal,
+    });
+
     await pool.query(
-      "INSERT INTO users (name, email, password, gender, age) VALUES ($1, $2, $3, $4, $5)",
-      [name, email, hashedPassword, gender, age]
+      `INSERT INTO users (name, email, password, gender, age, weight, height, goal, activity_level, calories) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        name,
+        email,
+        hashedPassword,
+        gender,
+        age,
+        weight,
+        height,
+        goal,
+        activityLevel,
+        calories,
+      ]
     );
 
     res.status(201).json({ message: "Регистрация успешна" });
@@ -137,7 +230,7 @@ app.post("/api/login", async (req, res) => {
 app.get("/api/profile", authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT name, email, gender, age, weight, height, goal FROM users WHERE id = $1",
+      "SELECT name, email, gender, age, weight, height, goal, activity_level, calories FROM users WHERE id = $1",
       [req.user.id]
     );
     const user = result.rows[0];
@@ -155,7 +248,16 @@ app.get("/api/profile", authenticateToken, async (req, res) => {
 
 // Обновление профиля (частичное обновление)
 app.put("/api/profile", authenticateToken, async (req, res) => {
-  const fields = ["name", "email", "gender", "age", "weight", "height", "goal"];
+  const fields = [
+    "name",
+    "email",
+    "gender",
+    "age",
+    "weight",
+    "height",
+    "goal",
+    "activity_level",
+  ];
   const updates = [];
   const values = [];
   let index = 1;
@@ -174,14 +276,52 @@ app.put("/api/profile", authenticateToken, async (req, res) => {
 
   values.push(req.user.id);
 
-  const query = `UPDATE users SET ${updates.join(", ")} WHERE id = $${index}`;
-
+  const client = await pool.connect();
   try {
-    await pool.query(query, values);
+    await client.query("BEGIN");
+
+    const query = `UPDATE users SET ${updates.join(", ")} WHERE id = $${index}`;
+    await client.query(query, values);
+
+    const userResult = await client.query(
+      "SELECT gender, age, weight, height, goal, activity_level FROM users WHERE id = $1",
+      [req.user.id]
+    );
+
+    const user = userResult.rows[0];
+
+    if (
+      user.weight &&
+      user.height &&
+      user.age &&
+      user.gender &&
+      user.goal &&
+      user.activity_level
+    ) {
+      const newCalories = calculateCalories({
+        gender: user.gender,
+        age: user.age,
+        weight: user.weight,
+        height: user.height,
+        goal: user.goal,
+        activityLevel: user.activity_level,
+      });
+
+      await client.query("UPDATE users SET calories = $1 WHERE id = $2", [
+        newCalories,
+        req.user.id,
+      ]);
+    }
+
+    await client.query("COMMIT");
+
     res.status(200).json({ message: "Профиль успешно обновлен" });
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error(error);
     res.status(500).json({ message: "Ошибка при обновлении профиля" });
+  } finally {
+    client.release();
   }
 });
 
