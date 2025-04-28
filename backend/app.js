@@ -3,11 +3,10 @@ const cors = require("cors");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-require("dotenv").config(); // Подключение dotenv
+require("dotenv").config();
 
 const app = express();
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
@@ -20,7 +19,6 @@ const pool = new Pool({
   port: process.env.DB_PORT,
 });
 
-// Секрет для подписи токенов
 const JWT_SECRET = process.env.JWT_SECRET;
 
 // Моковые данные для тестового меню
@@ -69,10 +67,12 @@ function authenticateToken(req, res, next) {
 
 // Регистрация пользователя
 app.post("/api/register", async (req, res) => {
-  const { email, password } = req.body;
+  const { name, email, password, gender, age } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ message: "Email и пароль обязательны" });
+  if (!name || !email || !password || !gender || !age) {
+    return res
+      .status(400)
+      .json({ message: "Имя, Email, Пароль, Пол и Возраст обязательны" });
   }
 
   try {
@@ -85,10 +85,10 @@ app.post("/api/register", async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    await pool.query("INSERT INTO users (email, password) VALUES ($1, $2)", [
-      email,
-      hashedPassword,
-    ]);
+    await pool.query(
+      "INSERT INTO users (name, email, password, gender, age) VALUES ($1, $2, $3, $4, $5)",
+      [name, email, hashedPassword, gender, age]
+    );
 
     res.status(201).json({ message: "Регистрация успешна" });
   } catch (error) {
@@ -97,7 +97,7 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-// Авторизация пользователя
+// Вход пользователя
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -122,7 +122,6 @@ app.post("/api/login", async (req, res) => {
       return res.status(400).json({ message: "Неверный пароль" });
     }
 
-    // Генерация JWT токена
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
       expiresIn: "1h",
     });
@@ -134,26 +133,61 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// Получение меню (только для авторизованных)
-app.get("/api/menu", authenticateToken, (req, res) => {
-  res.json(mockMenu);
+// Получение профиля
+app.get("/api/profile", authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT name, email, gender, age, weight, height, goal FROM users WHERE id = $1",
+      [req.user.id]
+    );
+    const user = result.rows[0];
+
+    if (!user) {
+      return res.status(404).json({ message: "Пользователь не найден" });
+    }
+
+    res.json(user);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Ошибка при получении профиля" });
+  }
 });
 
-// Сохранение данных профиля
-app.post("/api/profile", authenticateToken, async (req, res) => {
-  const { gender, age, weight, height, goal } = req.body;
+// Обновление профиля (частичное обновление)
+app.put("/api/profile", authenticateToken, async (req, res) => {
+  const fields = ["name", "email", "gender", "age", "weight", "height", "goal"];
+  const updates = [];
+  const values = [];
+  let index = 1;
+
+  for (const field of fields) {
+    if (req.body[field] !== undefined) {
+      updates.push(`${field} = $${index}`);
+      values.push(req.body[field]);
+      index++;
+    }
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ message: "Нет данных для обновления" });
+  }
+
+  values.push(req.user.id);
+
+  const query = `UPDATE users SET ${updates.join(", ")} WHERE id = $${index}`;
 
   try {
-    await pool.query(
-      "UPDATE users SET gender = $1, age = $2, weight = $3, height = $4, goal = $5 WHERE id = $6",
-      [gender, age, weight, height, goal, req.user.id]
-    );
-
+    await pool.query(query, values);
     res.status(200).json({ message: "Профиль успешно обновлен" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Ошибка при обновлении профиля" });
   }
+});
+
+// Получение меню
+app.get("/api/menu", authenticateToken, (req, res) => {
+  res.json(mockMenu);
 });
 
 // Запуск сервера

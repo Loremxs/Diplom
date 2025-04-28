@@ -21,6 +21,6 @@
 ### 1. Клонируйте репозиторий
 
 ```bash
-git clone https://github.com/ТВОЙ_АККАУНТ/ТВОЙ_РЕПОЗИТОРИЙ.git
-cd ТВОЙ_РЕПОЗИТОРИЙ
+git clone https://github.com/Loremxs/Diplom.git
+cd Diplom
 ```

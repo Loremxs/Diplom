@@ -4,6 +4,7 @@ import MenuCard from "./components/MenuCard";
 import Register from "./pages/Register";
 import Login from "./pages/Login";
 import ProfileSetup from "./pages/ProfileSetup";
+import Profile from "./pages/Profile"; // Новый импорт профиля
 import ProtectedRoute from "./components/ProtectedRoute";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -68,12 +69,17 @@ function App() {
           </>
         )}
         {isAuthenticated && (
-          <button
-            onClick={handleLogout}
-            className="text-red-500 hover:underline"
-          >
-            Выйти
-          </button>
+          <>
+            <Link to="/profile" className="text-blue-500 hover:underline">
+              Профиль
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="text-red-500 hover:underline"
+            >
+              Выйти
+            </button>
+          </>
         )}
       </nav>
       <Routes>
@@ -102,6 +108,14 @@ function App() {
         <Route path="/register" element={<Register setToken={setToken} />} />
         <Route path="/login" element={<Login setToken={setToken} />} />
         <Route path="/profile-setup" element={<ProfileSetup />} />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
       <ToastContainer />
     </div>
