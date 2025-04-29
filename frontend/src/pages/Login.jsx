@@ -25,10 +25,10 @@ function Login({ setToken }) {
       localStorage.setItem("token", token);
       localStorage.setItem("isAuthenticated", "true");
       setToken(token);
-      toast.success("Вход успешен!"); // Успешное уведомление
+      toast.success("Вход успешен!");
       setTimeout(() => navigate("/"), 1500);
     } else {
-      toast.error(data.message || "Ошибка входа"); // Ошибка уведомление
+      toast.error(data.message || "Ошибка входа");
     }
   };
 

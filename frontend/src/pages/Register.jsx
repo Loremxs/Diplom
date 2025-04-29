@@ -112,7 +112,6 @@ function Register() {
           required
         />
 
-        {/* ВАЖНО: value на английском! */}
         <select
           name="goal"
           value={formData.goal}
