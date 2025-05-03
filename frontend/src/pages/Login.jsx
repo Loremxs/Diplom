@@ -24,7 +24,6 @@ function Login({ setToken }) {
       const { token } = data;
       localStorage.setItem("token", token);
       localStorage.setItem("isAuthenticated", "true");
-      setToken(token);
       toast.success("Вход успешен!");
       setTimeout(() => navigate("/"), 1500);
     } else {

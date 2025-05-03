@@ -88,7 +88,6 @@ function calculateCalories({
   } else if (goal === "gain") {
     calories *= 1.15;
   } else if (goal === "maintain") {
-    // ничего не делаем
   } else {
     throw new Error("Invalid goal");
   }
@@ -137,12 +136,10 @@ app.post("/api/register", async (req, res) => {
     !goal ||
     !activityLevel
   ) {
-    return res
-      .status(400)
-      .json({
-        message:
-          "Все поля обязательны: имя, email, пароль, пол, возраст, вес, рост, цель, уровень активности",
-      });
+    return res.status(400).json({
+      message:
+        "Все поля обязательны: имя, email, пароль, пол, возраст, вес, рост, цель, уровень активности",
+    });
   }
 
   try {
@@ -329,7 +326,125 @@ app.put("/api/profile", authenticateToken, async (req, res) => {
 app.get("/api/menu", authenticateToken, (req, res) => {
   res.json(mockMenu);
 });
+// Генерация меню под пользователя
+app.get("/api/menu/generate", authenticateToken, async (req, res) => {
+  try {
+    // Получаем калорийность пользователя
+    const userResult = await pool.query(
+      "SELECT calories FROM users WHERE id = $1",
+      [req.user.id]
+    );
 
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: "Пользователь не найден" });
+    }
+
+    const totalCalories = userResult.rows[0].calories;
+
+    // Распределяем калории
+    const breakfastTarget = totalCalories * 0.3;
+    const lunchTarget = totalCalories * 0.4;
+    const dinnerTarget = totalCalories * 0.3;
+
+    // Функция для подбора блюд под калории
+    const pickMeals = async (type, target) => {
+      const result = await pool.query(
+        "SELECT * FROM meals WHERE meal_type = $1 ORDER BY RANDOM()",
+        [type]
+      );
+
+      const meals = result.rows;
+      const selected = [];
+      let sum = 0;
+
+      for (const meal of meals) {
+        if (sum + meal.calories <= target * 1.1) {
+          selected.push(meal);
+          sum += meal.calories;
+          if (sum >= target * 0.9) break;
+        }
+      }
+
+      return selected;
+    };
+
+    // Подбираем блюда
+    const breakfast = await pickMeals("breakfast", breakfastTarget);
+    const lunch = await pickMeals("lunch", lunchTarget);
+    const dinner = await pickMeals("dinner", dinnerTarget);
+
+    res.json({ breakfast, lunch, dinner });
+  } catch (error) {
+    console.error("Ошибка при генерации меню:", error);
+    res.status(500).json({ message: "Ошибка сервера при генерации меню" });
+  }
+});
+
+app.post("/api/menu/save", authenticateToken, async (req, res) => {
+  const { breakfast, lunch, dinner } = req.body;
+
+  if (!breakfast || !lunch || !dinner) {
+    return res.status(400).json({ message: "Неполные данные меню" });
+  }
+
+  try {
+    await pool.query(
+      "INSERT INTO saved_menus (user_id, breakfast, lunch, dinner) VALUES ($1, $2, $3, $4)",
+      [
+        req.user.id,
+        JSON.stringify(breakfast),
+        JSON.stringify(lunch),
+        JSON.stringify(dinner),
+      ]
+    );
+
+    res.status(201).json({ message: "Меню успешно сохранено!" });
+  } catch (error) {
+    console.error("Ошибка сохранения меню:", error);
+    res.status(500).json({ message: "Ошибка сервера при сохранении меню" });
+  }
+});
+
+app.get("/api/menu/history", authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, created_at, breakfast, lunch, dinner FROM saved_menus WHERE user_id = $1 ORDER BY created_at DESC",
+      [req.user.id]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Ошибка получения истории меню:", error);
+    res
+      .status(500)
+      .json({ message: "Ошибка сервера при получении истории меню" });
+  }
+});
+app.delete("/api/menu/history", authenticateToken, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM saved_menus WHERE user_id = $1", [
+      req.user.id,
+    ]);
+    res.status(200).json({ message: "История очищена" });
+  } catch (error) {
+    console.error("Ошибка очистки истории:", error);
+    res.status(500).json({ message: "Ошибка при очистке истории" });
+  }
+});
+app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
+  const menuId = req.params.id;
+
+  try {
+    await pool.query("DELETE FROM saved_menus WHERE id = $1 AND user_id = $2", [
+      menuId,
+      req.user.id,
+    ]);
+    res.status(200).json({ message: "Меню удалено" });
+  } catch (error) {
+    console.error("Ошибка удаления меню:", error);
+    res.status(500).json({ message: "Ошибка сервера при удалении меню" });
+  }
+});
 // Запуск сервера
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Backend listening on port ${PORT}`));

@@ -1,94 +1,47 @@
-import React, { useState, useEffect } from "react";
-import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
-import MenuCard from "./components/MenuCard";
+import React from "react";
+import { Routes, Route, useLocation } from "react-router-dom";
 import Register from "./pages/Register";
 import Login from "./pages/Login";
 import Profile from "./pages/Profile";
+import Home from "./pages/Home";
+import History from "./pages/History";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Navbar from "./components/Navbar";
-import { ToastContainer, toast } from "react-toastify";
+import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 function App() {
-  const [menu, setMenu] = useState([]);
-  const [token, setToken] = useState(localStorage.getItem("token"));
-  const [isLoading, setIsLoading] = useState(false);
-  const navigate = useNavigate();
   const location = useLocation();
-
-  const isAuthenticated = localStorage.getItem("isAuthenticated") === "true";
-
-  useEffect(() => {
-    const fetchMenu = async () => {
-      setIsLoading(true);
-      if (!token) {
-        setMenu([]);
-        setIsLoading(false);
-        return;
-      }
-
-      const response = await fetch("http://localhost:3000/api/menu", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setMenu(data);
-      } else {
-        console.error("Ошибка при получении меню");
-      }
-      setIsLoading(false);
-    };
-
-    fetchMenu();
-  }, [token]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated");
-    localStorage.removeItem("token");
-    setToken(null);
-    toast.success("Вы успешно вышли!");
-    navigate("/login");
-  };
 
   return (
     <div className="min-h-screen bg-gray-100">
       <Navbar />
+
       <div className="p-6">
         <Routes>
           <Route
             path="/"
             element={
               <ProtectedRoute>
-                <div>
-                  <h1 className="text-3xl font-bold text-center mb-6">
-                    Смарт Меню
-                  </h1>
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {isLoading
-                      ? Array.from({ length: 6 }).map((_, index) => (
-                          <div
-                            key={index}
-                            className="h-48 bg-gray-300 rounded-2xl animate-pulse"
-                          />
-                        ))
-                      : menu.map((item) => (
-                          <MenuCard key={item.id} {...item} />
-                        ))}
-                  </div>
-                </div>
+                <Home />
               </ProtectedRoute>
             }
           />
-          <Route path="/register" element={<Register setToken={setToken} />} />
-          <Route path="/login" element={<Login setToken={setToken} />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<Login />} />
           <Route
             path="/profile"
             element={
               <ProtectedRoute>
                 <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/history"
+            element={
+              <ProtectedRoute>
+                <History />
               </ProtectedRoute>
             }
           />

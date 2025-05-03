@@ -6,26 +6,24 @@ function Navbar() {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
-  const handleProfileClick = () => {
-    navigate("/profile");
-    setIsMenuOpen(false);
-  };
+  const isAuthenticated = !!token;
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("isAuthenticated");
+    localStorage.removeItem("generatedMenu");
     navigate("/login");
     setIsMenuOpen(false);
   };
 
   return (
     <nav className="flex justify-between items-center bg-white px-6 py-4 shadow-md">
-      <Link to="/" className="flex items-center">
+      <Link to="/" className="flex items-center gap-2">
         <img src="/logo.png" alt="Logo" className="h-10 w-auto" />
       </Link>
 
       <div className="flex items-center gap-4">
-        {!token ? (
+        {!isAuthenticated ? (
           <>
             <Link
               to="/login"
@@ -61,14 +59,28 @@ function Navbar() {
               }`}
             >
               <button
-                onClick={handleProfileClick}
+                onClick={() => {
+                  navigate("/profile");
+                  setIsMenuOpen(false);
+                }}
                 className="w-full text-left px-4 py-2 hover:bg-gray-100"
               >
                 Профиль
               </button>
+
+              <button
+                onClick={() => {
+                  navigate("/history");
+                  setIsMenuOpen(false);
+                }}
+                className="w-full text-left px-4 py-2 hover:bg-gray-100"
+              >
+                История
+              </button>
+
               <button
                 onClick={handleLogout}
-                className="w-full text-left px-4 py-2 hover:bg-gray-100"
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-red-500"
               >
                 Выйти
               </button>
