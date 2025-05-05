@@ -69,6 +69,44 @@ function Home() {
     }
   };
 
+  const replaceDish = async (mealType, index) => {
+    const token = localStorage.getItem("token");
+    const dishToReplace = menu[mealType][index];
+
+    try {
+      const params = new URLSearchParams({
+        type: mealType,
+        targetCalories: Number(dishToReplace.calories),
+        targetProtein: Number(dishToReplace.protein),
+        targetFat: Number(dishToReplace.fat),
+        targetCarbs: Number(dishToReplace.carbs),
+        excludeId: dishToReplace.id,
+      });
+
+      const res = await fetch(
+        `http://localhost:3000/api/menu/replace?${params.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (res.ok) {
+        const newDish = await res.json();
+        const updated = { ...menu };
+        updated[mealType][index] = newDish;
+        setMenu(updated);
+        toast.success("Блюдо заменено");
+      } else {
+        toast.error("Не удалось заменить блюдо");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Ошибка замены");
+    }
+  };
+
   const exportToPDF = () => {
     const content = [];
 
@@ -155,7 +193,18 @@ function Home() {
               </h2>
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {menu[mealType].map((item, idx) => (
-                  <MenuCard key={`${mealType}-${idx}`} {...item} />
+                  <MenuCard
+                    key={`${mealType}-${idx}`}
+                    {...item}
+                    onDelete={() => {
+                      const updated = { ...menu };
+                      updated[mealType] = updated[mealType].filter(
+                        (_, i) => i !== idx
+                      );
+                      setMenu(updated);
+                    }}
+                    onReplace={() => replaceDish(mealType, idx)}
+                  />
                 ))}
               </div>
             </div>
@@ -165,7 +214,6 @@ function Home() {
         <p className="text-center text-gray-500">Меню ещё не сгенерировано</p>
       )}
 
-      {/* Аналитика БЖУ */}
       {menu && (
         <div className="mt-12 bg-white rounded-xl shadow p-4 text-center text-lg font-medium">
           {(() => {

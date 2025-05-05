@@ -445,6 +445,42 @@ app.delete("/api/menu/:id", authenticateToken, async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера при удалении меню" });
   }
 });
+// Заменить одно блюдо по типу
+app.get("/api/menu/replace", authenticateToken, async (req, res) => {
+  const {
+    type,
+    targetCalories,
+    targetProtein,
+    targetFat,
+    targetCarbs,
+    excludeId,
+  } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT *, 
+        ABS(calories - $2) +
+        ABS(protein - $3) * 10 +
+        ABS(fat - $4) * 10 +
+        ABS(carbs - $5) * 10 AS score
+       FROM meals 
+       WHERE meal_type = $1 AND id != $6
+       ORDER BY score ASC 
+       LIMIT 1`,
+      [type, targetCalories, targetProtein, targetFat, targetCarbs, excludeId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Подходящее блюдо не найдено" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Ошибка при замене блюда" });
+  }
+});
+
 // Запуск сервера
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Backend listening on port ${PORT}`));
