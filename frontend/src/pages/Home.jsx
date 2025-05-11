@@ -234,20 +234,44 @@ function Home() {
                 </h2>
                 <p className="text-gray-500 mb-3">Ресторан: {restaurant}</p>
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {menu[mealType].map((item, idx) => (
-                    <MenuCard
-                      key={`${mealType}-${idx}`}
-                      {...item}
-                      onDelete={() => {
-                        const updated = { ...menu };
-                        updated[mealType] = updated[mealType].filter(
-                          (_, i) => i !== idx
-                        );
-                        setMenu(updated);
-                      }}
-                      onReplace={() => replaceDish(mealType, idx)}
-                    />
-                  ))}
+                  {menu[mealType].map((item, idx) => {
+                    let label = "";
+                    let icon = "";
+                    if (
+                      ["Суп", "Горячее", "Завтрак"].includes(item.meal_type)
+                    ) {
+                      label = "Основное";
+                      icon = "/meal.png";
+                    } else if (
+                      ["Салат", "Гарнир", "Закуска"].includes(item.meal_type)
+                    ) {
+                      label = "Гарнир";
+                      icon = "/garnier.png";
+                    } else if (item.meal_type === "Напиток") {
+                      label = "Напиток";
+                      icon = "/drink.png";
+                    }
+
+                    return (
+                      <div key={`${mealType}-${idx}`}>
+                        <p className="text-xs text-gray-500 mb-1 flex items-center gap-2">
+                          <img src={icon} alt={label} className="w-5 h-5" />{" "}
+                          {label}
+                        </p>
+                        <MenuCard
+                          {...item}
+                          onDelete={() => {
+                            const updated = { ...menu };
+                            updated[mealType] = updated[mealType].filter(
+                              (_, i) => i !== idx
+                            );
+                            setMenu(updated);
+                          }}
+                          onReplace={() => replaceDish(mealType, idx)}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
