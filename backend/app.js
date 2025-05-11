@@ -21,34 +21,6 @@ const pool = new Pool({
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// Моковые данные для тестового меню
-const mockMenu = [
-  {
-    id: 1,
-    name: "Цезарь с курицей",
-    calories: 320,
-    protein: 25,
-    fat: 18,
-    carbs: 20,
-  },
-  {
-    id: 2,
-    name: "Салат с тунцом",
-    calories: 280,
-    protein: 22,
-    fat: 12,
-    carbs: 15,
-  },
-  {
-    id: 3,
-    name: "Каша овсяная с фруктами",
-    calories: 350,
-    protein: 8,
-    fat: 5,
-    carbs: 60,
-  },
-];
-
 // Функция для расчета калорий
 function calculateCalories({
   gender,
@@ -326,10 +298,11 @@ app.put("/api/profile", authenticateToken, async (req, res) => {
 app.get("/api/menu", authenticateToken, (req, res) => {
   res.json(mockMenu);
 });
-// Генерация меню под пользователя
-app.get("/api/menu/generate", authenticateToken, async (req, res) => {
+// Генерация меню
+app.post("/api/menu/generate", authenticateToken, async (req, res) => {
   try {
-    // Получаем калорийность пользователя
+    const { diet, vegan, noFastfood } = req.body || {};
+
     const userResult = await pool.query(
       "SELECT calories FROM users WHERE id = $1",
       [req.user.id]
@@ -339,41 +312,94 @@ app.get("/api/menu/generate", authenticateToken, async (req, res) => {
       return res.status(404).json({ message: "Пользователь не найден" });
     }
 
-    const totalCalories = userResult.rows[0].calories;
+    const totalCalories = userResult.rows[0].calories || 2000;
 
-    // Распределяем калории
-    const breakfastTarget = totalCalories * 0.3;
-    const lunchTarget = totalCalories * 0.4;
-    const dinnerTarget = totalCalories * 0.3;
+    const mealTypeMap = {
+      breakfast: "Завтрак",
+      lunch: "Суп",
+      dinner: "Горячее",
+    };
 
-    // Функция для подбора блюд под калории
-    const pickMeals = async (type, target) => {
-      const result = await pool.query(
-        "SELECT * FROM meals WHERE meal_type = $1 ORDER BY RANDOM()",
-        [type]
+    const targets = {
+      breakfast: totalCalories * 0.3,
+      lunch: totalCalories * 0.4,
+      dinner: totalCalories * 0.3,
+    };
+
+    const buildFilterClause = () => {
+      const clauses = [];
+      if (diet) clauses.push("meal_type = 'Диетическое'");
+      if (vegan) clauses.push("meal_type = 'Вегетарианское'");
+      if (noFastfood) clauses.push("meal_type != 'Фастфуд'");
+      return clauses.length ? " AND " + clauses.join(" AND ") : "";
+    };
+
+    const filterClause = buildFilterClause();
+
+    const pickMealsFromSameRestaurant = async (type, targetCalories) => {
+      const translatedType = mealTypeMap[type];
+
+      const restaurantResult = await pool.query(
+        `SELECT restaurant
+         FROM meals
+         WHERE meal_type = $1 ${filterClause}
+         GROUP BY restaurant
+         HAVING COUNT(*) >= 3
+         ORDER BY RANDOM()
+         LIMIT 1`,
+        [translatedType]
       );
 
-      const meals = result.rows;
+      if (restaurantResult.rows.length === 0) {
+        console.warn(`[WARN] Нет ресторанов с блюдами для ${type}`);
+        return [];
+      }
+
+      const restaurant = restaurantResult.rows[0].restaurant;
+
+      const mealsResult = await pool.query(
+        `SELECT * FROM meals
+         WHERE meal_type = $1 AND restaurant = $2 ${filterClause}
+         ORDER BY RANDOM()`,
+        [translatedType, restaurant]
+      );
+
+      const meals = mealsResult.rows;
       const selected = [];
       let sum = 0;
 
       for (const meal of meals) {
-        if (sum + meal.calories <= target * 1.1) {
+        if (sum + meal.calories <= targetCalories * 1.1) {
           selected.push(meal);
           sum += meal.calories;
-          if (sum >= target * 0.9) break;
+          if (sum >= targetCalories * 0.9) break;
         }
       }
 
       return selected;
     };
 
-    // Подбираем блюда
-    const breakfast = await pickMeals("breakfast", breakfastTarget);
-    const lunch = await pickMeals("lunch", lunchTarget);
-    const dinner = await pickMeals("dinner", dinnerTarget);
+    const breakfast = await pickMealsFromSameRestaurant(
+      "breakfast",
+      targets.breakfast
+    );
+    const lunch = await pickMealsFromSameRestaurant("lunch", targets.lunch);
+    const dinner = await pickMealsFromSameRestaurant("dinner", targets.dinner);
 
-    res.json({ breakfast, lunch, dinner });
+    const menu = [...breakfast, ...lunch, ...dinner];
+
+    const summary = menu.reduce(
+      (acc, meal) => {
+        acc.calories += meal.calories;
+        acc.protein += meal.protein;
+        acc.fat += meal.fat;
+        acc.carbs += meal.carbs;
+        return acc;
+      },
+      { calories: 0, protein: 0, fat: 0, carbs: 0 }
+    );
+
+    res.json({ breakfast, lunch, dinner, summary });
   } catch (error) {
     console.error("Ошибка при генерации меню:", error);
     res.status(500).json({ message: "Ошибка сервера при генерации меню" });
@@ -381,15 +407,16 @@ app.get("/api/menu/generate", authenticateToken, async (req, res) => {
 });
 
 app.post("/api/menu/save", authenticateToken, async (req, res) => {
-  const { breakfast, lunch, dinner } = req.body;
-
-  if (!breakfast || !lunch || !dinner) {
-    return res.status(400).json({ message: "Неполные данные меню" });
-  }
-
   try {
+    const { breakfast, lunch, dinner } = req.body;
+
+    if (!breakfast || !lunch || !dinner) {
+      return res.status(400).json({ message: "Неполные данные меню" });
+    }
+
     await pool.query(
-      "INSERT INTO saved_menus (user_id, breakfast, lunch, dinner) VALUES ($1, $2, $3, $4)",
+      `INSERT INTO saved_menus (user_id, created_at, breakfast, lunch, dinner)
+       VALUES ($1, NOW(), $2, $3, $4)`,
       [
         req.user.id,
         JSON.stringify(breakfast),
@@ -398,13 +425,12 @@ app.post("/api/menu/save", authenticateToken, async (req, res) => {
       ]
     );
 
-    res.status(201).json({ message: "Меню успешно сохранено!" });
+    res.status(201).json({ message: "Меню успешно сохранено" });
   } catch (error) {
-    console.error("Ошибка сохранения меню:", error);
+    console.error("Ошибка при сохранении меню:", error);
     res.status(500).json({ message: "Ошибка сервера при сохранении меню" });
   }
 });
-
 app.get("/api/menu/history", authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
@@ -454,20 +480,29 @@ app.get("/api/menu/replace", authenticateToken, async (req, res) => {
     targetFat,
     targetCarbs,
     excludeId,
+    restaurant,
   } = req.query;
 
   try {
     const result = await pool.query(
-      `SELECT *, 
+      `SELECT *,
         ABS(calories - $2) +
         ABS(protein - $3) * 10 +
         ABS(fat - $4) * 10 +
         ABS(carbs - $5) * 10 AS score
        FROM meals 
-       WHERE meal_type = $1 AND id != $6
+       WHERE meal_type = $1 AND restaurant = $6 AND id != $7
        ORDER BY score ASC 
        LIMIT 1`,
-      [type, targetCalories, targetProtein, targetFat, targetCarbs, excludeId]
+      [
+        type,
+        targetCalories,
+        targetProtein,
+        targetFat,
+        targetCarbs,
+        restaurant,
+        excludeId,
+      ]
     );
 
     if (result.rows.length === 0) {
@@ -476,7 +511,7 @@ app.get("/api/menu/replace", authenticateToken, async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error("Ошибка при замене блюда:", err);
     res.status(500).json({ message: "Ошибка при замене блюда" });
   }
 });

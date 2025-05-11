@@ -181,8 +181,8 @@ function History() {
                   {selectedMenu[mealType].map((item, idx) => (
                     <li key={idx}>
                       <span className="font-medium">{item.name}</span> —{" "}
-                      {item.calories} ккал, Б: {item.protein} / Ж: {item.fat} /
-                      У: {item.carbs}
+                      {item.calories || 0} ккал, Б: {item.protein || 0} / Ж:{" "}
+                      {item.fat || 0} / У: {item.carbs || 0}
                     </li>
                   ))}
                 </ul>

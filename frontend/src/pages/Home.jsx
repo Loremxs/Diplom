@@ -9,6 +9,11 @@ pdfMake.vfs = pdfFonts.vfs;
 function Home() {
   const [menu, setMenu] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [filters, setFilters] = useState({
+    diet: false,
+    vegan: false,
+    noFastfood: false,
+  });
 
   useEffect(() => {
     const savedMenu = localStorage.getItem("generatedMenu");
@@ -23,16 +28,20 @@ function Home() {
 
     try {
       const res = await fetch("http://localhost:3000/api/menu/generate", {
-        method: "GET",
+        method: "POST",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify(filters),
       });
 
       if (res.ok) {
         const data = await res.json();
-        setMenu(data);
-        localStorage.setItem("generatedMenu", JSON.stringify(data));
+        const { breakfast, lunch, dinner, summary } = data;
+        const simplified = { breakfast, lunch, dinner, summary };
+        setMenu(simplified);
+        localStorage.setItem("generatedMenu", JSON.stringify(simplified));
         toast.success("Меню успешно сгенерировано!");
       } else {
         toast.error("Ошибка при генерации меню");
@@ -75,12 +84,13 @@ function Home() {
 
     try {
       const params = new URLSearchParams({
-        type: mealType,
+        type: dishToReplace.meal_type,
         targetCalories: Number(dishToReplace.calories),
         targetProtein: Number(dishToReplace.protein),
         targetFat: Number(dishToReplace.fat),
         targetCarbs: Number(dishToReplace.carbs),
         excludeId: dishToReplace.id,
+        restaurant: dishToReplace.restaurant,
       });
 
       const res = await fetch(
@@ -153,6 +163,35 @@ function Home() {
     <div>
       <h1 className="text-3xl font-bold text-center mb-6">Смарт Меню</h1>
 
+      <div className="flex justify-center gap-4 mb-4">
+        <label>
+          <input
+            type="checkbox"
+            checked={filters.diet}
+            onChange={() => setFilters({ ...filters, diet: !filters.diet })}
+          />{" "}
+          Диетическое
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={filters.vegan}
+            onChange={() => setFilters({ ...filters, vegan: !filters.vegan })}
+          />{" "}
+          Вегетарианское
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={filters.noFastfood}
+            onChange={() =>
+              setFilters({ ...filters, noFastfood: !filters.noFastfood })
+            }
+          />{" "}
+          Без фастфуда
+        </label>
+      </div>
+
       <div className="flex justify-center gap-4 mb-6">
         <button
           onClick={generateMenu}
@@ -182,59 +221,48 @@ function Home() {
 
       {menu ? (
         <div className="space-y-10">
-          {["breakfast", "lunch", "dinner"].map((mealType) => (
-            <div key={mealType}>
-              <h2 className="text-2xl font-semibold mb-4">
-                {mealType === "breakfast"
-                  ? "Завтрак"
-                  : mealType === "lunch"
-                  ? "Обед"
-                  : "Ужин"}
-              </h2>
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {menu[mealType].map((item, idx) => (
-                  <MenuCard
-                    key={`${mealType}-${idx}`}
-                    {...item}
-                    onDelete={() => {
-                      const updated = { ...menu };
-                      updated[mealType] = updated[mealType].filter(
-                        (_, i) => i !== idx
-                      );
-                      setMenu(updated);
-                    }}
-                    onReplace={() => replaceDish(mealType, idx)}
-                  />
-                ))}
+          {["breakfast", "lunch", "dinner"].map((mealType) => {
+            const restaurant = menu[mealType]?.[0]?.restaurant || "неизвестно";
+            return (
+              <div key={mealType}>
+                <h2 className="text-2xl font-semibold mb-4">
+                  {mealType === "breakfast"
+                    ? "Завтрак"
+                    : mealType === "lunch"
+                    ? "Обед"
+                    : "Ужин"}
+                </h2>
+                <p className="text-gray-500 mb-3">Ресторан: {restaurant}</p>
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {menu[mealType].map((item, idx) => (
+                    <MenuCard
+                      key={`${mealType}-${idx}`}
+                      {...item}
+                      onDelete={() => {
+                        const updated = { ...menu };
+                        updated[mealType] = updated[mealType].filter(
+                          (_, i) => i !== idx
+                        );
+                        setMenu(updated);
+                      }}
+                      onReplace={() => replaceDish(mealType, idx)}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <p className="text-center text-gray-500">Меню ещё не сгенерировано</p>
       )}
 
-      {menu && (
+      {menu?.summary && (
         <div className="mt-12 bg-white rounded-xl shadow p-4 text-center text-lg font-medium">
-          {(() => {
-            const allMeals = [...menu.breakfast, ...menu.lunch, ...menu.dinner];
-            const totals = allMeals.reduce(
-              (acc, item) => ({
-                calories: acc.calories + item.calories,
-                protein: acc.protein + item.protein,
-                fat: acc.fat + item.fat,
-                carbs: acc.carbs + item.carbs,
-              }),
-              { calories: 0, protein: 0, fat: 0, carbs: 0 }
-            );
-
-            return (
-              <div>
-                Итого: {totals.calories} ккал / Б: {totals.protein.toFixed(1)} г
-                / Ж: {totals.fat.toFixed(1)} г / У: {totals.carbs.toFixed(1)} г
-              </div>
-            );
-          })()}
+          Итого: {menu.summary.calories} ккал / Б:{" "}
+          {(menu.summary.protein || 0).toFixed(1)} г / Ж:{" "}
+          {(menu.summary.fat || 0).toFixed(1)} г / У:{" "}
+          {(menu.summary.carbs || 0).toFixed(1)} г
         </div>
       )}
     </div>
