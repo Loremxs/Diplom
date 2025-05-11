@@ -340,13 +340,7 @@ app.post("/api/menu/generate", authenticateToken, async (req, res) => {
       const translatedType = mealTypeMap[type];
 
       const restaurantResult = await pool.query(
-        `SELECT restaurant
-         FROM meals
-         WHERE meal_type = $1 ${filterClause}
-         GROUP BY restaurant
-         HAVING COUNT(*) >= 3
-         ORDER BY RANDOM()
-         LIMIT 1`,
+        `SELECT restaurant FROM meals WHERE meal_type = $1 ${filterClause} GROUP BY restaurant HAVING COUNT(*) >= 3 ORDER BY RANDOM() LIMIT 1`,
         [translatedType]
       );
 
@@ -357,26 +351,53 @@ app.post("/api/menu/generate", authenticateToken, async (req, res) => {
 
       const restaurant = restaurantResult.rows[0].restaurant;
 
-      const mealsResult = await pool.query(
-        `SELECT * FROM meals
-         WHERE meal_type = $1 AND restaurant = $2 ${filterClause}
-         ORDER BY RANDOM()`,
-        [translatedType, restaurant]
+      const allMealsResult = await pool.query(
+        `SELECT * FROM meals WHERE restaurant = $1 ${filterClause} ORDER BY RANDOM()`,
+        [restaurant]
       );
 
-      const meals = mealsResult.rows;
-      const selected = [];
-      let sum = 0;
+      const all = allMealsResult.rows;
+      const mains = all.filter((m) => ["Суп", "Горячее"].includes(m.meal_type));
+      const sides = all.filter((m) =>
+        ["Салат", "Закуска", "Гарнир"].includes(m.meal_type)
+      );
+      const drinks = all.filter((m) => m.meal_type === "Напиток");
 
-      for (const meal of meals) {
-        if (sum + meal.calories <= targetCalories * 1.1) {
-          selected.push(meal);
-          sum += meal.calories;
-          if (sum >= targetCalories * 0.9) break;
+      let bestCombo = null;
+      let bestScore = Infinity;
+
+      const target = {
+        calories: targetCalories,
+        protein: (targetCalories * 0.3) / 4,
+        fat: (targetCalories * 0.3) / 9,
+        carbs: (targetCalories * 0.4) / 4,
+      };
+
+      for (const main of mains) {
+        for (const side of sides) {
+          for (const drink of drinks) {
+            const sum = {
+              calories: main.calories + side.calories + drink.calories,
+              protein: main.protein + side.protein + drink.protein,
+              fat: main.fat + side.fat + drink.fat,
+              carbs: main.carbs + side.carbs + drink.carbs,
+            };
+
+            const score =
+              Math.abs(sum.calories - target.calories) +
+              Math.abs(sum.protein - target.protein) * 10 +
+              Math.abs(sum.fat - target.fat) * 10 +
+              Math.abs(sum.carbs - target.carbs) * 10;
+
+            if (score < bestScore) {
+              bestScore = score;
+              bestCombo = [main, side, drink];
+            }
+          }
         }
       }
 
-      return selected;
+      return bestCombo || [];
     };
 
     const breakfast = await pickMealsFromSameRestaurant(
